@@ -1,9 +1,48 @@
-from agents import (
-    build_reader_agent,
-    build_search_agent,
-    writer_chain,
-    critic_chain,
-)
+from agents import build_reader_agent,build_search_agent,writer_chain,critic_chain
+
+
+# =========================================================
+# CONTENT NORMALIZATION HELPER
+# =========================================================
+
+def extract_text(content) -> str:
+    """
+    Normalize LangChain message content into a plain string.
+
+    content may be:
+        - a str
+        - a list of content blocks (dicts with 'text'/'content', or
+          plain strings) — this shape shows up with some providers
+          and tool-calling agents.
+        - something else entirely (fallback to str())
+    """
+
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+
+        parts = []
+
+        for block in content:
+
+            if isinstance(block, str):
+                parts.append(block)
+
+            elif isinstance(block, dict):
+                text = (
+                    block.get("text")
+                    or block.get("content")
+                    or ""
+                )
+                parts.append(text)
+
+            else:
+                parts.append(str(block))
+
+        return "\n".join(p for p in parts if p)
+
+    return str(content)
 
 
 # =========================================================
@@ -49,13 +88,6 @@ def run_research_pipeline(
         phase,
         payload=None,
     ):
-        """
-        Send progress information to the UI.
-
-        This is optional. If the pipeline is running
-        from the terminal, on_progress will simply be None.
-        """
-
         if on_progress is not None:
 
             try:
@@ -111,10 +143,6 @@ def run_research_pipeline(
             }
         )
 
-        # -------------------------------------------------
-        # Extract final search response
-        # -------------------------------------------------
-
         messages = search_result.get(
             "messages",
             [],
@@ -126,7 +154,7 @@ def run_research_pipeline(
                 "Search agent returned no messages."
             )
 
-        state["search_results"] = (
+        state["search_results"] = extract_text(
             messages[-1].content
         )
 
@@ -191,10 +219,6 @@ Search Results:
             }
         )
 
-        # -------------------------------------------------
-        # Extract final reader response
-        # -------------------------------------------------
-
         messages = reader_result.get(
             "messages",
             [],
@@ -206,7 +230,7 @@ Search Results:
                 "Reader agent returned no messages."
             )
 
-        state["scraped_content"] = (
+        state["scraped_content"] = extract_text(
             messages[-1].content
         )
 
@@ -266,22 +290,18 @@ Search Results:
             }
         )
 
-        # -------------------------------------------------
-        # Support both AIMessage and string responses
-        # -------------------------------------------------
-
         if hasattr(
             writer_result,
             "content",
         ):
 
-            state["report"] = (
+            state["report"] = extract_text(
                 writer_result.content
             )
 
         else:
 
-            state["report"] = str(
+            state["report"] = extract_text(
                 writer_result
             )
 
@@ -331,22 +351,18 @@ Search Results:
             }
         )
 
-        # -------------------------------------------------
-        # Support both AIMessage and string responses
-        # -------------------------------------------------
-
         if hasattr(
             critic_result,
             "content",
         ):
 
-            state["feedback"] = (
+            state["feedback"] = extract_text(
                 critic_result.content
             )
 
         else:
 
-            state["feedback"] = str(
+            state["feedback"] = extract_text(
                 critic_result
             )
 
@@ -385,7 +401,8 @@ Search Results:
 
 
 # =========================================================
-# TERMINAL TEST
+# TERMINAL TEST (only runs via `python pipeline.py`,
+# never when imported by Streamlit)
 # =========================================================
 
 if __name__ == "__main__":
