@@ -437,9 +437,7 @@ if run_button:
     try:
 
         result = run_research_pipeline(
-            topic.strip(),
-            on_progress=ui_progress,
-        )
+            topic.strip())
 
 
         if not result:
