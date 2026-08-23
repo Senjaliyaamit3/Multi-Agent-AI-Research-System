@@ -23,6 +23,10 @@ st.markdown(
     """
     <style>
 
+        /* =================================================
+           GLOBAL APP
+           ================================================= */
+
         .stApp {
             background:
                 radial-gradient(
@@ -56,13 +60,26 @@ st.markdown(
             background: transparent !important;
         }
 
-        h1, h2, h3 {
+
+        /* =================================================
+           TEXT
+           ================================================= */
+
+        h1,
+        h2,
+        h3 {
             color: #f8fafc !important;
         }
 
-        p, label {
+        p,
+        label {
             color: #cbd5e1;
         }
+
+
+        /* =================================================
+           TEXT INPUT
+           ================================================= */
 
         div[data-testid="stTextInput"] input {
             background-color: #0b1120 !important;
@@ -76,6 +93,11 @@ st.markdown(
             border-color: #6366f1 !important;
             box-shadow: 0 0 0 1px #6366f1 !important;
         }
+
+
+        /* =================================================
+           BUTTON
+           ================================================= */
 
         div.stButton > button {
             min-height: 48px;
@@ -98,6 +120,11 @@ st.markdown(
                 0 10px 30px rgba(99, 102, 241, 0.25);
         }
 
+
+        /* =================================================
+           METRICS
+           ================================================= */
+
         div[data-testid="stMetric"] {
             background: #0d1422;
             border: 1px solid #202b3e;
@@ -113,6 +140,11 @@ st.markdown(
             color: #f8fafc !important;
         }
 
+
+        /* =================================================
+           TABS
+           ================================================= */
+
         button[data-baseweb="tab"] {
             color: #64748b !important;
             font-weight: 600;
@@ -122,19 +154,39 @@ st.markdown(
             color: #a5b4fc !important;
         }
 
+
+        /* =================================================
+           EXPANDER
+           ================================================= */
+
         div[data-testid="stExpander"] {
             background: #0c121e;
             border: 1px solid #202b3e;
             border-radius: 14px;
         }
 
+
+        /* =================================================
+           ALERTS
+           ================================================= */
+
         div[data-testid="stAlert"] {
             border-radius: 12px;
         }
 
+
+        /* =================================================
+           DIVIDER
+           ================================================= */
+
         hr {
             border-color: #1e293b !important;
         }
+
+
+        /* =================================================
+           MOBILE
+           ================================================= */
 
         @media (max-width: 768px) {
 
@@ -161,11 +213,8 @@ if "pipeline_result" not in st.session_state:
 if "pipeline_running" not in st.session_state:
     st.session_state.pipeline_running = False
 
-if "current_step" not in st.session_state:
-    st.session_state.current_step = None
-
-if "completed_steps" not in st.session_state:
-    st.session_state.completed_steps = []
+if "research_topic" not in st.session_state:
+    st.session_state.research_topic = ""
 
 
 # =========================================================
@@ -221,6 +270,7 @@ with input_col:
 
     topic = st.text_input(
         "Research topic",
+        value=st.session_state.research_topic,
         placeholder=(
             "e.g. How will AI agents transform software development?"
         ),
@@ -245,37 +295,31 @@ st.write("")
 
 steps = [
     (
-        "search",
         "01",
         "Search Agent",
         "Find reliable sources",
     ),
     (
-        "scrape",
         "02",
         "Reader Agent",
         "Extract deep content",
     ),
     (
-        "write",
         "03",
         "Writer",
         "Synthesize report",
     ),
     (
-        "critique",
         "04",
         "Critic",
         "Review findings",
     ),
 ]
 
-
 step_columns = st.columns(4)
 
 
 for index, (
-    step_id,
     number,
     title,
     description,
@@ -283,39 +327,17 @@ for index, (
 
     with step_columns[index]:
 
-        if step_id in st.session_state.completed_steps:
-
-            icon = "🟢"
-
-        elif st.session_state.current_step == step_id:
-
-            icon = "🔵"
-
-        else:
-
-            icon = "⚪"
-
         st.markdown(
-            f"**{icon} {number}  {title}**"
+            f"**⚪ {number}  {title}**"
         )
 
         st.caption(description)
 
-        if step_id in st.session_state.completed_steps:
-
-            st.progress(1.0)
-
-        elif st.session_state.current_step == step_id:
-
-            st.progress(0.55)
-
-        else:
-
-            st.progress(0.0)
+        st.progress(0.0)
 
 
 # =========================================================
-# STATUS
+# STATUS PLACEHOLDER
 # =========================================================
 
 status_placeholder = st.empty()
@@ -327,107 +349,56 @@ status_placeholder = st.empty()
 
 if run_button:
 
-    if not topic.strip():
+    # -----------------------------------------------------
+    # VALIDATE TOPIC
+    # -----------------------------------------------------
+
+    clean_topic = topic.strip()
+
+    if not clean_topic:
 
         st.warning(
-            "Please enter a research topic before starting."
+            "⚠️ Please enter a research topic before starting."
         )
 
         st.stop()
 
 
     # -----------------------------------------------------
-    # RESET STATE
+    # SAVE TOPIC
     # -----------------------------------------------------
 
-    st.session_state.pipeline_running = True
+    st.session_state.research_topic = clean_topic
+
+
+    # -----------------------------------------------------
+    # RESET PREVIOUS RESULT
+    # -----------------------------------------------------
 
     st.session_state.pipeline_result = None
+    st.session_state.pipeline_running = True
 
-    st.session_state.current_step = None
 
-    st.session_state.completed_steps = []
-
+    # -----------------------------------------------------
+    # STATUS
+    # -----------------------------------------------------
 
     status_placeholder.info(
-        "🔬 Initializing your research team..."
+        "🔬 Initializing your multi-agent research team..."
     )
 
 
     # -----------------------------------------------------
-    # PROGRESS CALLBACK
+    # PROGRESS DISPLAY
+    #
+    # Current pipeline.py does NOT accept on_progress.
+    # Therefore we do not pass a callback here.
     # -----------------------------------------------------
 
-    def ui_progress(
-        step_id,
-        phase,
-        payload=None,
-    ):
-
-        if phase == "start":
-
-            st.session_state.current_step = step_id
-
-            labels = {
-
-                "search":
-                    "🔎 Search Agent is finding reliable sources...",
-
-                "scrape":
-                    "📚 Reader Agent is extracting detailed research...",
-
-                "write":
-                    "✍️ Writer is drafting the report...",
-
-                "critique":
-                    "🧠 Critic is reviewing the report...",
-            }
-
-            status_placeholder.info(
-                labels.get(
-                    step_id,
-                    f"Working on {step_id}...",
-                )
-            )
-
-
-        elif phase == "done":
-
-            if step_id not in st.session_state.completed_steps:
-
-                st.session_state.completed_steps.append(
-                    step_id
-                )
-
-            st.session_state.current_step = None
-
-            labels = {
-
-                "search":
-                    "Search completed.",
-
-                "scrape":
-                    "Research extraction completed.",
-
-                "write":
-                    "Report drafting completed.",
-
-                "critique":
-                    "Critical review completed.",
-            }
-
-            status_placeholder.success(
-                f"✓ {labels.get(step_id, 'Step completed.')}"
-            )
-
-
-        elif phase == "error":
-
-            st.session_state.current_step = None
-
-            status_placeholder.error(
-                f"✕ {step_id.title()} failed: {payload}"
-            )
+    progress_bar = st.progress(
+        0,
+        text="Preparing research pipeline..."
+    )
 
 
     # -----------------------------------------------------
@@ -436,9 +407,32 @@ if run_button:
 
     try:
 
-        result = run_research_pipeline(
-            topic.strip())
+        # =================================================
+        # STEP 1 - SEARCH
+        # =================================================
 
+        progress_bar.progress(
+            10,
+            text="🔎 Search Agent is finding reliable sources..."
+        )
+
+        status_placeholder.info(
+            "🔎 Step 1/4 — Search Agent is finding reliable sources..."
+        )
+
+
+        # =================================================
+        # ACTUAL PIPELINE
+        # =================================================
+
+        result = run_research_pipeline(
+            clean_topic
+        )
+
+
+        # =================================================
+        # VALIDATE RESULT
+        # =================================================
 
         if not result:
 
@@ -447,17 +441,23 @@ if run_button:
             )
 
 
+        if not isinstance(result, dict):
+
+            raise TypeError(
+                "The research pipeline must return a dictionary."
+            )
+
+
+        # =================================================
+        # FINISH
+        # =================================================
+
+        progress_bar.progress(
+            100,
+            text="✅ Research pipeline completed."
+        )
+
         st.session_state.pipeline_result = result
-
-        st.session_state.current_step = None
-
-        st.session_state.completed_steps = [
-            "search",
-            "scrape",
-            "write",
-            "critique",
-        ]
-
 
         status_placeholder.success(
             "🎉 Research completed successfully."
@@ -466,13 +466,42 @@ if run_button:
 
     except Exception as exc:
 
-        st.session_state.current_step = None
+        # -------------------------------------------------
+        # CLEAR OLD RESULT
+        # -------------------------------------------------
+
+        st.session_state.pipeline_result = None
+
+
+        # -------------------------------------------------
+        # ERROR MESSAGE
+        # -------------------------------------------------
 
         status_placeholder.error(
             "❌ Research pipeline failed."
         )
 
-        st.exception(exc)
+
+        # -------------------------------------------------
+        # ERROR DETAILS
+        # -------------------------------------------------
+
+        with st.expander(
+            "🔍 View Error Details",
+            expanded=True,
+        ):
+
+            st.exception(exc)
+
+
+        # -------------------------------------------------
+        # HELP
+        # -------------------------------------------------
+
+        st.warning(
+            "Please check your API keys, agent configuration, "
+            "prompt variables, and pipeline.py."
+        )
 
 
     finally:
@@ -494,9 +523,9 @@ if result:
     st.subheader("Research Overview")
 
 
-    # -----------------------------------------------------
+    # =====================================================
     # RESULT DATA
-    # -----------------------------------------------------
+    # =====================================================
 
     search_text = result.get(
         "search_results",
@@ -519,9 +548,38 @@ if result:
     )
 
 
-    # -----------------------------------------------------
+    # =====================================================
+    # SAFE STRING CONVERSION
+    # =====================================================
+
+    search_text = (
+        str(search_text)
+        if search_text is not None
+        else ""
+    )
+
+    scraped_text = (
+        str(scraped_text)
+        if scraped_text is not None
+        else ""
+    )
+
+    report_text = (
+        str(report_text)
+        if report_text is not None
+        else ""
+    )
+
+    feedback_text = (
+        str(feedback_text)
+        if feedback_text is not None
+        else ""
+    )
+
+
+    # =====================================================
     # METRICS
-    # -----------------------------------------------------
+    # =====================================================
 
     metric_1, metric_2, metric_3, metric_4 = st.columns(4)
 
@@ -565,9 +623,9 @@ if result:
     st.write("")
 
 
-    # -----------------------------------------------------
+    # =====================================================
     # TABS
-    # -----------------------------------------------------
+    # =====================================================
 
     report_tab, sources_tab, research_tab, critique_tab = st.tabs(
         [
@@ -601,7 +659,6 @@ if result:
             )
 
             st.write("")
-
 
             st.download_button(
                 label="⬇️ Download Report",
@@ -724,7 +781,6 @@ if result:
             )
 
             st.write("")
-
 
             st.download_button(
                 label="⬇️ Download Critique",
