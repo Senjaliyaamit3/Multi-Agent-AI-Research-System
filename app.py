@@ -1,4 +1,5 @@
 import streamlit as st
+
 from pipeline import run_research_pipeline
 
 
@@ -15,15 +16,12 @@ st.set_page_config(
 
 
 # =========================================================
-# PREMIUM DARK THEME
+# CUSTOM DARK UI
 # =========================================================
 
 st.markdown(
     """
     <style>
-        /* =================================================
-           GLOBAL
-           ================================================= */
 
         .stApp {
             background:
@@ -46,8 +44,6 @@ st.markdown(
             padding-bottom: 4rem;
         }
 
-        /* Hide Streamlit chrome */
-
         #MainMenu {
             visibility: hidden;
         }
@@ -60,10 +56,6 @@ st.markdown(
             background: transparent !important;
         }
 
-        /* =================================================
-           TYPOGRAPHY
-           ================================================= */
-
         h1, h2, h3 {
             color: #f8fafc !important;
         }
@@ -71,10 +63,6 @@ st.markdown(
         p, label {
             color: #cbd5e1;
         }
-
-        /* =================================================
-           TEXT INPUT
-           ================================================= */
 
         div[data-testid="stTextInput"] input {
             background-color: #0b1120 !important;
@@ -88,10 +76,6 @@ st.markdown(
             border-color: #6366f1 !important;
             box-shadow: 0 0 0 1px #6366f1 !important;
         }
-
-        /* =================================================
-           BUTTON
-           ================================================= */
 
         div.stButton > button {
             min-height: 48px;
@@ -114,10 +98,6 @@ st.markdown(
                 0 10px 30px rgba(99, 102, 241, 0.25);
         }
 
-        /* =================================================
-           METRICS
-           ================================================= */
-
         div[data-testid="stMetric"] {
             background: #0d1422;
             border: 1px solid #202b3e;
@@ -133,10 +113,6 @@ st.markdown(
             color: #f8fafc !important;
         }
 
-        /* =================================================
-           TABS
-           ================================================= */
-
         button[data-baseweb="tab"] {
             color: #64748b !important;
             font-weight: 600;
@@ -146,54 +122,29 @@ st.markdown(
             color: #a5b4fc !important;
         }
 
-        div[data-baseweb="tab-highlight"] {
-            background-color: #6366f1 !important;
-        }
-
-        /* =================================================
-           EXPANDERS
-           ================================================= */
-
         div[data-testid="stExpander"] {
             background: #0c121e;
             border: 1px solid #202b3e;
             border-radius: 14px;
         }
 
-        /* =================================================
-           ALERTS
-           ================================================= */
-
         div[data-testid="stAlert"] {
             border-radius: 12px;
         }
-
-        /* =================================================
-           CODE / RESEARCH CONTENT
-           ================================================= */
-
-        .stMarkdown {
-            color: #cbd5e1;
-        }
-
-        /* =================================================
-           DIVIDER
-           ================================================= */
 
         hr {
             border-color: #1e293b !important;
         }
 
-        /* =================================================
-           MOBILE
-           ================================================= */
-
         @media (max-width: 768px) {
+
             .block-container {
                 padding-left: 1rem;
                 padding-right: 1rem;
             }
+
         }
+
     </style>
     """,
     unsafe_allow_html=True,
@@ -216,16 +167,6 @@ if "current_step" not in st.session_state:
 if "completed_steps" not in st.session_state:
     st.session_state.completed_steps = []
 
-# ---------------------------------------------------------
-# MINIMAL FIX:
-# If a previous run crashed/interrupted before reaching the
-# `finally` block, pipeline_running could stay stuck as True
-# on the next script load, which permanently disables the
-# "Run Research" button. Reset it safely on every fresh run.
-# ---------------------------------------------------------
-if st.session_state.pipeline_running:
-    st.session_state.pipeline_running = False
-
 
 # =========================================================
 # HEADER
@@ -237,9 +178,8 @@ with logo_col:
     st.markdown("# 🔬")
 
 with title_col:
-    st.markdown(
-        "## Research Intelligence"
-    )
+    st.markdown("## Research Intelligence")
+
     st.caption(
         "Multi-agent research, synthesis and critical analysis"
     )
@@ -276,7 +216,9 @@ input_col, button_col = st.columns(
     vertical_alignment="bottom",
 )
 
+
 with input_col:
+
     topic = st.text_input(
         "Research topic",
         placeholder=(
@@ -285,7 +227,9 @@ with input_col:
         label_visibility="collapsed",
     )
 
+
 with button_col:
+
     run_button = st.button(
         "🚀 Run Research",
         use_container_width=True,
@@ -294,19 +238,41 @@ with button_col:
 
 
 # =========================================================
-# PIPELINE STEPPER
+# PIPELINE STEPS
 # =========================================================
 
 st.write("")
 
 steps = [
-    ("search", "01", "Search Agent", "Find reliable sources"),
-    ("scrape", "02", "Reader Agent", "Extract deep content"),
-    ("write", "03", "Writer", "Synthesize report"),
-    ("critique", "04", "Critic", "Review findings"),
+    (
+        "search",
+        "01",
+        "Search Agent",
+        "Find reliable sources",
+    ),
+    (
+        "scrape",
+        "02",
+        "Reader Agent",
+        "Extract deep content",
+    ),
+    (
+        "write",
+        "03",
+        "Writer",
+        "Synthesize report",
+    ),
+    (
+        "critique",
+        "04",
+        "Critic",
+        "Review findings",
+    ),
 ]
 
+
 step_columns = st.columns(4)
+
 
 for index, (
     step_id,
@@ -318,16 +284,16 @@ for index, (
     with step_columns[index]:
 
         if step_id in st.session_state.completed_steps:
+
             icon = "🟢"
-            status = "Complete"
 
         elif st.session_state.current_step == step_id:
+
             icon = "🔵"
-            status = "Running"
 
         else:
+
             icon = "⚪"
-            status = "Waiting"
 
         st.markdown(
             f"**{icon} {number}  {title}**"
@@ -335,73 +301,86 @@ for index, (
 
         st.caption(description)
 
-        if status == "Running":
-            st.progress(0.55)
-        elif status == "Complete":
+        if step_id in st.session_state.completed_steps:
+
             st.progress(1.0)
+
+        elif st.session_state.current_step == step_id:
+
+            st.progress(0.55)
+
         else:
+
             st.progress(0.0)
 
 
 # =========================================================
-# PIPELINE STATUS
+# STATUS
 # =========================================================
 
 status_placeholder = st.empty()
 
 
 # =========================================================
-# RUN PIPELINE
+# RUN RESEARCH
 # =========================================================
 
 if run_button:
 
     if not topic.strip():
+
         st.warning(
             "Please enter a research topic before starting."
         )
+
         st.stop()
 
-    # Reset state
+
+    # -----------------------------------------------------
+    # RESET STATE
+    # -----------------------------------------------------
+
     st.session_state.pipeline_running = True
+
     st.session_state.pipeline_result = None
+
     st.session_state.current_step = None
+
     st.session_state.completed_steps = []
+
 
     status_placeholder.info(
         "🔬 Initializing your research team..."
     )
+
+
+    # -----------------------------------------------------
+    # PROGRESS CALLBACK
+    # -----------------------------------------------------
 
     def ui_progress(
         step_id,
         phase,
         payload=None,
     ):
-        """
-        Receives progress events from the pipeline.
-        """
 
         if phase == "start":
 
             st.session_state.current_step = step_id
 
             labels = {
-                "search": (
-                    "🔎 Search Agent is finding "
-                    "reliable sources..."
-                ),
-                "scrape": (
-                    "📚 Reader Agent is extracting "
-                    "detailed research..."
-                ),
-                "write": (
-                    "✍️ Writer is drafting "
-                    "the report..."
-                ),
-                "critique": (
-                    "🧠 Critic is reviewing "
-                    "the report..."
-                ),
+
+                "search":
+                    "🔎 Search Agent is finding reliable sources...",
+
+                "scrape":
+                    "📚 Reader Agent is extracting detailed research...",
+
+                "write":
+                    "✍️ Writer is drafting the report...",
+
+                "critique":
+                    "🧠 Critic is reviewing the report...",
             }
 
             status_placeholder.info(
@@ -411,9 +390,11 @@ if run_button:
                 )
             )
 
+
         elif phase == "done":
 
             if step_id not in st.session_state.completed_steps:
+
                 st.session_state.completed_steps.append(
                     step_id
                 )
@@ -421,15 +402,24 @@ if run_button:
             st.session_state.current_step = None
 
             labels = {
-                "search": "Search completed.",
-                "scrape": "Research extraction completed.",
-                "write": "Report drafting completed.",
-                "critique": "Critical review completed.",
+
+                "search":
+                    "Search completed.",
+
+                "scrape":
+                    "Research extraction completed.",
+
+                "write":
+                    "Report drafting completed.",
+
+                "critique":
+                    "Critical review completed.",
             }
 
             status_placeholder.success(
                 f"✓ {labels.get(step_id, 'Step completed.')}"
             )
+
 
         elif phase == "error":
 
@@ -439,12 +429,25 @@ if run_button:
                 f"✕ {step_id.title()} failed: {payload}"
             )
 
+
+    # -----------------------------------------------------
+    # RUN PIPELINE
+    # -----------------------------------------------------
+
     try:
 
         result = run_research_pipeline(
             topic.strip(),
             on_progress=ui_progress,
         )
+
+
+        if not result:
+
+            raise ValueError(
+                "The research pipeline returned an empty result."
+            )
+
 
         st.session_state.pipeline_result = result
 
@@ -457,23 +460,26 @@ if run_button:
             "critique",
         ]
 
+
         status_placeholder.success(
             "🎉 Research completed successfully."
         )
+
 
     except Exception as exc:
 
         st.session_state.current_step = None
 
         status_placeholder.error(
-            f"Research pipeline failed: {exc}"
+            "❌ Research pipeline failed."
         )
+
+        st.exception(exc)
+
 
     finally:
 
         st.session_state.pipeline_running = False
-
-    st.rerun()
 
 
 # =========================================================
@@ -489,8 +495,9 @@ if result:
 
     st.subheader("Research Overview")
 
+
     # -----------------------------------------------------
-    # Metrics
+    # RESULT DATA
     # -----------------------------------------------------
 
     search_text = result.get(
@@ -513,40 +520,55 @@ if result:
         "",
     )
 
+
+    # -----------------------------------------------------
+    # METRICS
+    # -----------------------------------------------------
+
     metric_1, metric_2, metric_3, metric_4 = st.columns(4)
 
+
     with metric_1:
+
         st.metric(
             "Pipeline stages",
             "4 / 4",
             "Completed",
         )
 
+
     with metric_2:
+
         st.metric(
             "Search data",
             f"{len(search_text):,}",
             "characters",
         )
 
+
     with metric_3:
+
         st.metric(
             "Research extracted",
             f"{len(scraped_text):,}",
             "characters",
         )
 
+
     with metric_4:
+
         st.metric(
             "Report size",
             f"{len(report_text):,}",
             "characters",
         )
 
+
     st.write("")
 
+
     # -----------------------------------------------------
-    # Results Tabs
+    # TABS
     # -----------------------------------------------------
 
     report_tab, sources_tab, research_tab, critique_tab = st.tabs(
@@ -558,23 +580,30 @@ if result:
         ]
     )
 
+
     # =====================================================
-    # REPORT
+    # FINAL REPORT
     # =====================================================
 
     with report_tab:
 
-        st.subheader("Final Research Report")
+        st.subheader(
+            "Final Research Report"
+        )
 
         st.caption(
             "Synthesized findings produced by the writer agent."
         )
 
+
         if report_text:
 
-            st.markdown(report_text)
+            st.markdown(
+                report_text
+            )
 
             st.write("")
+
 
             st.download_button(
                 label="⬇️ Download Report",
@@ -590,17 +619,21 @@ if result:
                 "No report was returned by the writer agent."
             )
 
+
     # =====================================================
     # SEARCH RESULTS
     # =====================================================
 
     with sources_tab:
 
-        st.subheader("Source Discovery")
+        st.subheader(
+            "Source Discovery"
+        )
 
         st.caption(
             "Information returned by the search agent."
         )
+
 
         if search_text:
 
@@ -608,7 +641,11 @@ if result:
                 "View complete search output",
                 expanded=True,
             ):
-                st.markdown(search_text)
+
+                st.markdown(
+                    search_text
+                )
+
 
             st.download_button(
                 label="⬇️ Download Search Results",
@@ -624,17 +661,21 @@ if result:
                 "No search results were returned."
             )
 
+
     # =====================================================
     # DETAILED RESEARCH
     # =====================================================
 
     with research_tab:
 
-        st.subheader("Detailed Research")
+        st.subheader(
+            "Detailed Research"
+        )
 
         st.caption(
             "Content extracted by the reader agent."
         )
+
 
         if scraped_text:
 
@@ -642,7 +683,11 @@ if result:
                 "View extracted research",
                 expanded=True,
             ):
-                st.markdown(scraped_text)
+
+                st.markdown(
+                    scraped_text
+                )
+
 
             st.download_button(
                 label="⬇️ Download Research",
@@ -658,24 +703,30 @@ if result:
                 "No detailed research was returned."
             )
 
+
     # =====================================================
     # CRITIQUE
     # =====================================================
 
     with critique_tab:
 
-        st.subheader("Critical Review")
+        st.subheader(
+            "Critical Review"
+        )
 
         st.caption(
-            "Independent evaluation of the report "
-            "against the underlying research."
+            "Independent evaluation of the report against the underlying research."
         )
+
 
         if feedback_text:
 
-            st.markdown(feedback_text)
+            st.markdown(
+                feedback_text
+            )
 
             st.write("")
+
 
             st.download_button(
                 label="⬇️ Download Critique",
@@ -704,6 +755,7 @@ else:
         [1, 2, 1]
     )
 
+
     with empty_center:
 
         st.info(
@@ -721,6 +773,7 @@ else:
 # =========================================================
 
 st.write("")
+
 st.divider()
 
 st.caption(
