@@ -216,6 +216,16 @@ if "current_step" not in st.session_state:
 if "completed_steps" not in st.session_state:
     st.session_state.completed_steps = []
 
+# ---------------------------------------------------------
+# MINIMAL FIX:
+# If a previous run crashed/interrupted before reaching the
+# `finally` block, pipeline_running could stay stuck as True
+# on the next script load, which permanently disables the
+# "Run Research" button. Reset it safely on every fresh run.
+# ---------------------------------------------------------
+if st.session_state.pipeline_running:
+    st.session_state.pipeline_running = False
+
 
 # =========================================================
 # HEADER
