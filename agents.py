@@ -1,3 +1,5 @@
+import os
+
 from langchain.agents import create_agent
 from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -6,6 +8,35 @@ from tools import web_search, scrape_url
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# ---------------------------------------------------------
+# MINIMAL FIX:
+# Locally, load_dotenv() reads MISTRAL_API_KEY from your .env
+# file into os.environ, so ChatMistralAI picks it up fine.
+#
+# On Streamlit Community Cloud there is no .env file — instead
+# keys are stored in the app's "Secrets" (st.secrets). If the
+# key isn't already in the environment (i.e. we're not running
+# locally with a .env), pull it from st.secrets and inject it
+# into os.environ so ChatMistralAI can find it the same way.
+#
+# This keeps local development working exactly as before while
+# also making the deployed Streamlit app work.
+# ---------------------------------------------------------
+
+if not os.environ.get("MISTRAL_API_KEY"):
+
+    try:
+        import streamlit as st
+
+        if "MISTRAL_API_KEY" in st.secrets:
+            os.environ["MISTRAL_API_KEY"] = st.secrets["MISTRAL_API_KEY"]
+
+    except Exception:
+        # Not running inside Streamlit (e.g. `python pipeline.py`
+        # from the terminal) — safe to ignore.
+        pass
+
 
 # model setup
 llm = ChatMistralAI(
