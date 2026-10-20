@@ -7,10 +7,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # =========================================================
-# MODEL SETUP  (change these values if you still get 429s)
+# MODEL SETUP  (Mistral only, uses just MISTRAL_API_KEY)
+#
+# Main model first. If it fails (for example with a 429),
+# the backup Mistral models are tried automatically. They
+# use the same API key.
 # =========================================================
 
-MODEL_NAME = "mistral-small-latest"
+MAIN_MODEL = "mistral-small-latest"
+BACKUP_MODELS = ["open-mistral-nemo", "ministral-8b-latest"]
 REQUESTS_PER_SECOND = 0.5      # 0.5 = one request every 2 seconds; try 0.2 if needed
 
 rate_limiter = InMemoryRateLimiter(
@@ -19,13 +24,21 @@ rate_limiter = InMemoryRateLimiter(
     max_bucket_size=1,
 )
 
-llm = ChatMistralAI(
-    model=MODEL_NAME,
-    temperature=0,
-    rate_limiter=rate_limiter,
-    max_retries=6,
-    timeout=90,
-)
+
+def _make_model(name: str, retries: int) -> ChatMistralAI:
+    return ChatMistralAI(
+        model=name,
+        temperature=0,
+        rate_limiter=rate_limiter,
+        max_retries=retries,
+        timeout=90,
+    )
+
+
+main_llm = _make_model(MAIN_MODEL, retries=2)
+backup_llms = [_make_model(name, retries=2) for name in BACKUP_MODELS]
+
+llm = main_llm.with_fallbacks(backup_llms)
 
 
 # =========================================================
