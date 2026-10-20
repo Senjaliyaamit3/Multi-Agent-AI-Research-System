@@ -1,72 +1,69 @@
-import os
-
 from langchain.agents import create_agent
 from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from tools import web_search , scrape_url 
+from langchain_core.rate_limiters import InMemoryRateLimiter
+from tools import web_search, scrape_url
 from dotenv import load_dotenv
 
 load_dotenv()
 
-<<<<<<< HEAD
-# ---------------------------------------------------------
-# MINIMAL FIX:
-# Locally, load_dotenv() reads MISTRAL_API_KEY from your .env
-# file into os.environ, so ChatMistralAI picks it up fine.
-#
-# On Streamlit Community Cloud there is no .env file — instead
-# keys are stored in the app's "Secrets" (st.secrets). If the
-# key isn't already in the environment (i.e. we're not running
-# locally with a .env), pull it from st.secrets and inject it
-# into os.environ so ChatMistralAI can find it the same way.
-#
-# This keeps local development working exactly as before while
-# also making the deployed Streamlit app work.
-# ---------------------------------------------------------
+# =========================================================
+# MODEL SETUP
+# One shared rate limiter, so every agent and chain draws
+# from the same request budget.
+# =========================================================
 
-if not os.environ.get("MISTRAL_API_KEY"):
-
-    try:
-        import streamlit as st
-
-        if "MISTRAL_API_KEY" in st.secrets:
-            os.environ["MISTRAL_API_KEY"] = st.secrets["MISTRAL_API_KEY"]
-
-    except Exception:
-        # Not running inside Streamlit (e.g. `python pipeline.py`
-        # from the terminal) — safe to ignore.
-        pass
-
-
-# model setup
-llm = ChatMistralAI(
-    model = "mistral-small-latest",
-    temperature = 0
+rate_limiter = InMemoryRateLimiter(
+    requests_per_second=0.5,    # one request every 2 seconds; lower to 0.2 if 429s persist
+    check_every_n_seconds=0.1,
+    max_bucket_size=1,          # no bursts
 )
-=======
-#model setup 
-llm = ChatMistralAI(model = "mistral-small-latest",temperature=0)
->>>>>>> 56c3d90 (commit)
+
+llm = ChatMistralAI(
+    model="mistral-small-latest",
+    temperature=0,
+    rate_limiter=rate_limiter,
+    max_retries=6,
+    timeout=60,
+)
 
 
-#1st agent 
+# =========================================================
+# 1ST AGENT - SEARCH
+# =========================================================
+
 def build_search_agent():
     return create_agent(
-        model = llm,
-        tools= [web_search]
+        model=llm,
+        tools=[web_search],
+        system_prompt=(
+            "You are a research search assistant. Run at most 2 searches, "
+            "then reply with a list of the best results. For each result "
+            "include the title, the full URL and a short summary."
+        ),
     )
 
-#2nd agent 
+
+# =========================================================
+# 2ND AGENT - READER
+# =========================================================
 
 def build_reader_agent():
     return create_agent(
-        model = llm,
-        tools = [scrape_url]
+        model=llm,
+        tools=[scrape_url],
+        system_prompt=(
+            "You are a research reader. Scrape exactly one URL, the most "
+            "relevant one from the search results, then return its key "
+            "content as a concise summary of the important facts."
+        ),
     )
 
 
-#writer chain 
+# =========================================================
+# WRITER CHAIN
+# =========================================================
 
 writer_prompt = ChatPromptTemplate.from_messages([
     ("system", "You are an expert research writer. Write clear, structured and insightful reports."),
@@ -88,11 +85,21 @@ Be detailed, factual and professional."""),
 
 writer_chain = writer_prompt | llm | StrOutputParser()
 
-#critic_chain 
+
+# =========================================================
+# CRITIC CHAIN
+# Receives topic, research and report, matching what
+# pipeline.py passes in.
+# =========================================================
 
 critic_prompt = ChatPromptTemplate.from_messages([
-     ("system", "You are a sharp and constructive research critic. Be honest and specific."),
-    ("human", """Review the research report below and evaluate it strictly.
+    ("system", "You are a sharp and constructive research critic. Be honest and specific."),
+    ("human", """Review the research report below against the topic and the research it was based on. Evaluate it strictly.
+
+Topic: {topic}
+
+Research Gathered:
+{research}
 
 Report:
 {report}
@@ -113,60 +120,4 @@ One line verdict:
 ..."""),
 ])
 
-<<<<<<< HEAD
-        (
-            "human",
-            """Critically review the following research report.
-
-            Topic:
-            {topic}
-
-            Research Gathered:
-            {research}
-
-            Research Report:
-            {report}
-
-            Evaluate the report using the following criteria:
-
-            - Accuracy
-            - Completeness
-            - Relevance
-            - Source quality
-            - Logical reasoning
-            - Clarity
-            - Structure
-            - Unsupported claims / hallucinations
-            - Quality of conclusion
-
-            Return your review in this format:
-
-            ## Overall Assessment
-            Give a brief overall evaluation of the report.
-
-            ## Strengths
-            List the strongest parts of the report.
-
-            ## Issues Found
-            List factual errors, unsupported claims, missing information,
-            weak reasoning, or structural problems.
-
-            ## Missing Information
-            Mention important information that should be added.
-
-            ## Recommended Improvements
-            Give specific and actionable suggestions for improving the report.
-
-            ## Final Verdict
-            Classify the report as one of:
-            - PASS
-            - NEEDS_REVISION
-            - MAJOR_REVISION
-
-            Be objective, factual, and critical. Do not rewrite the complete report."""
-            )
-        ])
-
-=======
->>>>>>> 56c3d90 (commit)
 critic_chain = critic_prompt | llm | StrOutputParser()
