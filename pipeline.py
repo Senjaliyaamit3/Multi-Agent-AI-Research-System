@@ -1,17 +1,31 @@
-from agents import (
-    build_reader_agent,
-    build_search_agent,
-    writer_chain,
-    critic_chain,
-)
+import re
+import time
 
-# Limits that keep prompts small enough for Mistral's tokens-per-minute cap
-MAX_SEARCH_CHARS = 3000
-MAX_SCRAPED_CHARS = 4000
+import httpx
 
+from agents import writer_chain, critic_chain
+from tools import web_search, scrape_url
+
+
+# =========================================================
+# SETTINGS  (change these if you need to)
+# =========================================================
+
+MAX_SEARCH_CHARS = 3000       # search text sent to the model
+MAX_SCRAPED_CHARS = 4000      # scraped page text sent to the model
+PAUSE_BETWEEN_STEPS = 3       # seconds to wait between model calls
+RETRIES = 4                   # retries when Mistral returns 429
+RETRY_BASE_DELAY = 10         # seconds; doubles after each retry
+
+URL_PATTERN = re.compile(r"https?://[^\s\)\]\}>\"'<,]+")
+
+
+# =========================================================
+# HELPERS
+# =========================================================
 
 def _as_text(content) -> str:
-    """Agent message content can be a string or a list of content blocks."""
+    """Turn any tool or model output into a plain string."""
     if content is None:
         return ""
     if isinstance(content, str):
@@ -23,9 +37,47 @@ def _as_text(content) -> str:
                 parts.append(block)
             elif isinstance(block, dict) and "text" in block:
                 parts.append(block["text"])
+            else:
+                parts.append(str(block))
         return "\n".join(parts)
     return str(content)
 
+
+def _call_tool(tool, value: str) -> str:
+    """
+    Calls a LangChain @tool (or a plain function) with one text argument.
+    Works for tools that take a single string such as a query or a URL.
+    """
+    if hasattr(tool, "invoke"):
+        return _as_text(tool.invoke(value))
+    return _as_text(tool(value))
+
+
+def _with_retry(fn, *args, **kwargs):
+    """Retries a call when the API answers 429 (rate limit)."""
+    for attempt in range(RETRIES):
+        try:
+            return fn(*args, **kwargs)
+        except httpx.HTTPStatusError as exc:
+            is_rate_limit = exc.response.status_code == 429
+            if not is_rate_limit or attempt == RETRIES - 1:
+                raise
+            time.sleep(RETRY_BASE_DELAY * (2 ** attempt))
+
+
+def _extract_urls(text: str) -> list:
+    """Finds URLs in text, removing trailing punctuation and duplicates."""
+    urls = []
+    for match in URL_PATTERN.findall(text):
+        url = match.rstrip(".,;:!?")
+        if url not in urls:
+            urls.append(url)
+    return urls
+
+
+# =========================================================
+# MAIN PIPELINE
+# =========================================================
 
 def run_research_pipeline(topic: str, on_progress=None) -> dict:
     """
@@ -44,56 +96,44 @@ def run_research_pipeline(topic: str, on_progress=None) -> dict:
 
     state = {}
 
-    # =========================================================
-    # STEP 1 - SEARCH AGENT
-    # =========================================================
+    # =====================================================
+    # STEP 1 - SEARCH  (direct tool call, no model needed)
+    # =====================================================
 
     notify(0, "🔎 Step 1/4: Search Agent is finding reliable sources...")
 
-    search_agent = build_search_agent()
+    state["search_results"] = _call_tool(web_search, topic)
 
-    search_result = search_agent.invoke({
-        "messages": [
-            (
-                "user",
-                f"Find recent, reliable and detailed information about: {topic}"
-            )
-        ]
-    })
+    print("\nSEARCH RESULT:\n", state["search_results"][:MAX_SEARCH_CHARS])
 
-    state["search_results"] = _as_text(search_result["messages"][-1].content)
-
-    print("\nSEARCH RESULT:\n", state["search_results"])
-
-    # =========================================================
-    # STEP 2 - READER AGENT
-    # =========================================================
+    # =====================================================
+    # STEP 2 - READER  (scrape the first working URL)
+    # =====================================================
 
     notify(1, "📖 Step 2/4: Reader Agent is extracting deep content...")
 
-    reader_agent = build_reader_agent()
+    urls = _extract_urls(state["search_results"])
+    scraped = ""
 
-    reader_result = reader_agent.invoke({
-        "messages": [
-            (
-                "user",
-                f"""Based on the following search results about '{topic}',
-pick the most relevant URL and scrape it for deeper content.
+    for url in urls[:3]:                      # try up to 3 URLs
+        try:
+            scraped = _call_tool(scrape_url, url)
+        except Exception as exc:              # a site may block scraping
+            print(f"Could not scrape {url}: {exc}")
+            continue
+        if scraped.strip():
+            scraped = f"Source: {url}\n\n{scraped}"
+            break
 
-Search Results:
+    state["scraped_content"] = scraped or (
+        "No page could be scraped. The report uses the search results only."
+    )
 
-{state["search_results"][:MAX_SEARCH_CHARS]}"""
-            )
-        ]
-    })
+    print("\nSCRAPED CONTENT:\n", state["scraped_content"][:MAX_SCRAPED_CHARS])
 
-    state["scraped_content"] = _as_text(reader_result["messages"][-1].content)
-
-    print("\nSCRAPED CONTENT:\n", state["scraped_content"])
-
-    # =========================================================
-    # STEP 3 - WRITER CHAIN
-    # =========================================================
+    # =====================================================
+    # STEP 3 - WRITER
+    # =====================================================
 
     notify(2, "✍️ Step 3/4: Writer is drafting the report...")
 
@@ -104,31 +144,40 @@ Search Results:
         f"{state['scraped_content'][:MAX_SCRAPED_CHARS]}"
     )
 
-    state["report"] = writer_chain.invoke({
-        "topic": topic,
-        "research": research_combined,
-    })
+    time.sleep(PAUSE_BETWEEN_STEPS)
+
+    state["report"] = _with_retry(
+        writer_chain.invoke,
+        {
+            "topic": topic,
+            "research": research_combined,
+        },
+    )
 
     print("\nFINAL REPORT:\n", state["report"])
 
-    # =========================================================
-    # STEP 4 - CRITIC CHAIN
-    # =========================================================
+    # =====================================================
+    # STEP 4 - CRITIC
+    # =====================================================
 
     notify(3, "🧠 Step 4/4: Critic is reviewing the report...")
 
-    # critic_chain expects: topic, research, report
-    state["feedback"] = critic_chain.invoke({
-        "topic": topic,
-        "research": research_combined,
-        "report": state["report"],
-    })
+    time.sleep(PAUSE_BETWEEN_STEPS)
+
+    state["feedback"] = _with_retry(
+        critic_chain.invoke,
+        {
+            "topic": topic,
+            "research": research_combined,
+            "report": state["report"],
+        },
+    )
 
     print("\nCRITIC REPORT:\n", state["feedback"])
 
-    # =========================================================
+    # =====================================================
     # DONE
-    # =========================================================
+    # =====================================================
 
     notify(4, "✅ Research pipeline completed.")
 

@@ -1,64 +1,31 @@
-from langchain.agents import create_agent
 from langchain_mistralai import ChatMistralAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.rate_limiters import InMemoryRateLimiter
-from tools import web_search, scrape_url
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # =========================================================
-# MODEL SETUP
-# One shared rate limiter, so every agent and chain draws
-# from the same request budget.
+# MODEL SETUP  (change these values if you still get 429s)
 # =========================================================
 
+MODEL_NAME = "mistral-small-latest"
+REQUESTS_PER_SECOND = 0.5      # 0.5 = one request every 2 seconds; try 0.2 if needed
+
 rate_limiter = InMemoryRateLimiter(
-    requests_per_second=0.5,    # one request every 2 seconds; lower to 0.2 if 429s persist
+    requests_per_second=REQUESTS_PER_SECOND,
     check_every_n_seconds=0.1,
-    max_bucket_size=1,          # no bursts
+    max_bucket_size=1,
 )
 
 llm = ChatMistralAI(
-    model="mistral-small-latest",
+    model=MODEL_NAME,
     temperature=0,
     rate_limiter=rate_limiter,
     max_retries=6,
-    timeout=60,
+    timeout=90,
 )
-
-
-# =========================================================
-# 1ST AGENT - SEARCH
-# =========================================================
-
-def build_search_agent():
-    return create_agent(
-        model=llm,
-        tools=[web_search],
-        system_prompt=(
-            "You are a research search assistant. Run at most 2 searches, "
-            "then reply with a list of the best results. For each result "
-            "include the title, the full URL and a short summary."
-        ),
-    )
-
-
-# =========================================================
-# 2ND AGENT - READER
-# =========================================================
-
-def build_reader_agent():
-    return create_agent(
-        model=llm,
-        tools=[scrape_url],
-        system_prompt=(
-            "You are a research reader. Scrape exactly one URL, the most "
-            "relevant one from the search results, then return its key "
-            "content as a concise summary of the important facts."
-        ),
-    )
 
 
 # =========================================================
@@ -80,7 +47,7 @@ Structure the report as:
 - Conclusion
 - Sources (list all URLs found in the research)
 
-Be detailed, factual and professional."""),
+Be detailed, factual and professional. Only use facts from the research above."""),
 ])
 
 writer_chain = writer_prompt | llm | StrOutputParser()
@@ -88,8 +55,6 @@ writer_chain = writer_prompt | llm | StrOutputParser()
 
 # =========================================================
 # CRITIC CHAIN
-# Receives topic, research and report, matching what
-# pipeline.py passes in.
 # =========================================================
 
 critic_prompt = ChatPromptTemplate.from_messages([
