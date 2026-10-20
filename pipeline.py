@@ -5,8 +5,42 @@ from agents import (
     critic_chain,
 )
 
+# Limits that keep prompts small enough for Mistral's tokens-per-minute cap
+MAX_SEARCH_CHARS = 3000
+MAX_SCRAPED_CHARS = 4000
 
-def run_research_pipeline(topic: str) -> dict:
+
+def _as_text(content) -> str:
+    """Agent message content can be a string or a list of content blocks."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and "text" in block:
+                parts.append(block["text"])
+        return "\n".join(parts)
+    return str(content)
+
+
+def run_research_pipeline(topic: str, on_progress=None) -> dict:
+    """
+    Runs the 4-step research pipeline.
+
+    on_progress(step_index, message) is called as each step starts:
+        0 = search, 1 = reader, 2 = writer, 3 = critic, 4 = finished
+    """
+
+    def notify(step: int, message: str):
+        print("\n" + "=" * 50)
+        print(message)
+        print("=" * 50)
+        if on_progress:
+            on_progress(step, message)
 
     state = {}
 
@@ -14,9 +48,7 @@ def run_research_pipeline(topic: str) -> dict:
     # STEP 1 - SEARCH AGENT
     # =========================================================
 
-    print("\n" + "=" * 50)
-    print("STEP 1 - SEARCH AGENT IS WORKING...")
-    print("=" * 50)
+    notify(0, "🔎 Step 1/4: Search Agent is finding reliable sources...")
 
     search_agent = build_search_agent()
 
@@ -29,21 +61,15 @@ def run_research_pipeline(topic: str) -> dict:
         ]
     })
 
-    state["search_results"] = search_result["messages"][-1].content
+    state["search_results"] = _as_text(search_result["messages"][-1].content)
 
-    print(
-        "\nSEARCH RESULT:\n",
-        state["search_results"]
-    )
-
+    print("\nSEARCH RESULT:\n", state["search_results"])
 
     # =========================================================
     # STEP 2 - READER AGENT
     # =========================================================
 
-    print("\n" + "=" * 50)
-    print("STEP 2 - READER AGENT IS SCRAPING TOP RESOURCES...")
-    print("=" * 50)
+    notify(1, "📖 Step 2/4: Reader Agent is extracting deep content...")
 
     reader_agent = build_reader_agent()
 
@@ -51,41 +77,31 @@ def run_research_pipeline(topic: str) -> dict:
         "messages": [
             (
                 "user",
-                f"""
-Based on the following search results about '{topic}', 
+                f"""Based on the following search results about '{topic}',
 pick the most relevant URL and scrape it for deeper content.
 
 Search Results:
 
-{state["search_results"][:800]}
-"""
+{state["search_results"][:MAX_SEARCH_CHARS]}"""
             )
         ]
     })
 
-    state["scraped_content"] = (
-        reader_result["messages"][-1].content
-    )
+    state["scraped_content"] = _as_text(reader_result["messages"][-1].content)
 
-    print(
-        "\nSCRAPED CONTENT:\n",
-        state["scraped_content"]
-    )
-
+    print("\nSCRAPED CONTENT:\n", state["scraped_content"])
 
     # =========================================================
     # STEP 3 - WRITER CHAIN
     # =========================================================
 
-    print("\n" + "=" * 50)
-    print("STEP 3 - WRITER IS DRAFTING THE REPORT...")
-    print("=" * 50)
+    notify(2, "✍️ Step 3/4: Writer is drafting the report...")
 
     research_combined = (
         f"SEARCH RESULTS:\n"
-        f"{state['search_results']}\n\n"
+        f"{state['search_results'][:MAX_SEARCH_CHARS]}\n\n"
         f"DETAILED SCRAPED CONTENT:\n"
-        f"{state['scraped_content']}"
+        f"{state['scraped_content'][:MAX_SCRAPED_CHARS]}"
     )
 
     state["report"] = writer_chain.invoke({
@@ -93,41 +109,28 @@ Search Results:
         "research": research_combined,
     })
 
-    print(
-        "\nFINAL REPORT:\n",
-        state["report"]
-    )
-
+    print("\nFINAL REPORT:\n", state["report"])
 
     # =========================================================
     # STEP 4 - CRITIC CHAIN
     # =========================================================
 
-    print("\n" + "=" * 50)
-    print("STEP 4 - CRITIC IS REVIEWING THE REPORT...")
-    print("=" * 50)
+    notify(3, "🧠 Step 4/4: Critic is reviewing the report...")
 
-    # IMPORTANT:
-    # critic_chain expects:
-    # 1. topic
-    # 2. research
-    # 3. report
-
+    # critic_chain expects: topic, research, report
     state["feedback"] = critic_chain.invoke({
         "topic": topic,
         "research": research_combined,
         "report": state["report"],
     })
 
-    print(
-        "\nCRITIC REPORT:\n",
-        state["feedback"]
-    )
-
+    print("\nCRITIC REPORT:\n", state["feedback"])
 
     # =========================================================
-    # RETURN COMPLETE STATE
+    # DONE
     # =========================================================
+
+    notify(4, "✅ Research pipeline completed.")
 
     return state
 
@@ -138,9 +141,7 @@ Search Results:
 
 if __name__ == "__main__":
 
-    topic = input(
-        "\nEnter a research topic: "
-    )
+    topic = input("\nEnter a research topic: ")
 
     result = run_research_pipeline(topic)
 
